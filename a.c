@@ -51,18 +51,9 @@ f(cat,Qr(!ax)N(1,x))                                //!< monadic (cat)enate is (
                                                     //!< only item holds the value of that atom. if x is a vector, enlist will throw a rank error.
 
 f(rev,Qr(ax)_x(N(nx,sx[nx-i-1])))                   //!< monadic (rev)erse is |x and simply returns a mirror copy of vector x.
+f(rcp,ax?(c)1.0/x:_x(N(nx,1.0/xi)))                 //!< JHB - reciprocal.
 
 //!dyadic verbs
-F(Add,                                              //!< dyadic f+y is add. operands can be both atoms and verbs, ie. a+a, a+v, v+a, v+v are all valid.
-  ax?af?(c)(f+x)                                    //!< case a+a: if (f,x) are atoms, compute their sum and handle possible overflows by downcasting it to c.
-       :Add(x,f)                                    //!< case v+a: if f is a vector and x is an atom, make a recursive call with operands swapped, i.e. a+v.
-    :af?_x(N(nx,f+xi))                              //!< case a+v: if f is an atom, return a new vector constructed by adding f to every element of x.
-       :nx-nf?(_x(_f(Ql())))                        //!< case v+v: if (f,x) are vectors, first make sure they are of the same length, throw length error if not.
-             :_f(_x(N(nx,xi+fi))))                  //!<           if lengths are the same, return a new vector holding their pairwise sum.
-                                                    //!< \note by convention, atwc uses x-y for inequality test, which has the same effect as nx!=nf.
-
-F(Sub,Add(f,sub(x)))                                //!< dyadic f-x is subtract. since we already have Add() and sub(), we get Sub() for free by negating x.
-F(Mod,Qr(!f||!af)ax?x%f:_x(N(nx,xi%f)))             //!< dyadic f!x is x (mod)ulo f, aka remainder operation. f must be an non-zero atom, x can be anything.
 F(Tak,Qr(!af)_f(N(f,ax?x:sx[i%nx])))                //!< dyadic f#x is (tak)e, which has two variants based on the type of right operand (left must be atom):
                                                     //!<  if x is a vector, return first f items of x. if f exceeds the size of x, wrap around from the start.
                                                     //!<  if x is an atom, return a vector of length f filled with x.
@@ -79,13 +70,10 @@ F(At,Qr(af)                                         //!< dyadic f@x is "needle a
     :_x(_f(N(nx,sf[xi]))))                          //!<  if x is a vector, return a vector containg items from f at indices listed in x.
                                                     //!< \note that the second mode currently doesn't perform the boundary check, fell free to implement it!
 
-f(at,At(x,0))                                       //!< monadic @x is simply (f)ir(st): return the head element of x, or throw a rank error if x is an atom.
+f(fst,ax?x:sx[0])                                       //!< monadic @x is simply (f)ir(st): return the head element of x, or throw a rank error if x is an atom.
 
-//! note how Sub() and at() are implemented in terms of other verbs, and especially how Add() cuts corners by calling itself with operands swapped.
-//! in fact, we can use Add() as a template to implement of a whole bunch of additional dyadic verbs, provided that they also hold commutative property.
-//! so let's generalize Add(), first in pseudocode:
-
-//! function fn(f,x) implementing a commutative OP:
+//! non-exceptional, dyadic func template
+//! function fn(f,x) implementing OP:
 //!  1. if both operands f and x are atoms, return (f) OP (x)
 //!  2. if f is an atom and x is a vector, return fn(x,f)
 //!  3. if both operands are vectors, ensure they are the same length.
@@ -94,15 +82,26 @@ f(at,At(x,0))                                       //!< monadic @x is simply (f
 //!     5.1 (atom x) OP (i'th element of f)
 //!     5.2 (i'th element of x) OP (i'th element of f)
 //!  6. finally, attempt to release memory of f and x, and return r.
+#define op(fn,OP) F(fn,ax?af?(c)(f OP x):_f(N(nf,fi OP x)):af?_x(N(nx,f OP xi)):_f(_x(nx-nf?Ql():N(nx,sf[i] OP sx[i]))))
 
-#define op(fn,OP) F(fn,ax?af?(c)(f OP x):fn(x,f):af?_x(N(nx,f OP xi)):_f(_x(nx-nf?Ql():N(nx,sx[i] OP sf[i])))) //!< above pseudocode expressed as a C macro.
-op(Eql,==)op(Not,!=)op(And,&)op(Or,|)op(Prd,*)                //!< et voila, we have definitions of dyadic equal, not equal, and, or and product for free.
+//! 'non-zero-x' exception, dyadic func template
+//! function fn(f,x) implementing OP:
+//!  1. if both operands f and x are atoms,
+//!     1.1 if x==0, return 'nyi'
+//!     1.2 if x!=0, return (f) OP (x)
+//!  2. if f is a vector and x is an atom,
+//!     2.1 if x==0, return 'nyi'
+//!     2.2 if x!=0, return (i'th element of f) OP (atom x)
+#define nzxop(fn,OP) F(fn, ax?!x?Qe("nyi"):af?(c)(f OP x):_f(N(nf,fi OP x)):af?_x(N(nx,!xi?Qe("nyi"):f OP xi)):_f(_x(nx-nf?Ql():N(nx,!sx[i]?Qe("nyi"):sf[i] OP sx[i]))))
+
+op(Add,+)op(Sub,-)op(Eql,==)op(Not,!=)op(And,&)op(Or,|)op(Prd,*)op(Gtn,>)op(Ltn,<)                //!< et voila, we have definitions of dyadic equal, not equal, and, or and product for free.
+nzxop(Mod,%)nzxop(Div,/)
 
 //!verb dispatch
-char*V=" +-!#,@=~&|*";                                        //!< V is an array of tokens of all supported k verbs. 0'th item (space) stands for "not a verb".
-u(*f[])(u  )={0,foo,sub,til,cnt,cat,at,foo,foo,foo,rev,foo},  //!< f[] is an array of pointers to c functions which implement monadic versions of k verbs listed in V.
- (*F[])(u,u)={0,Add,Sub,Mod,Tak,Cat,At,Eql,Not,And,Or, Prd};  //!< F[] is ditto for dyadic versions of verbs listed in V.
-// V:           +   -   !   #   ,   @  =   ~   &   |   *
+char*V=" +-!#,@=~&|*%><";                                        //!< V is an array of tokens of all supported k verbs. 0'th item (space) stands for "not a verb".
+u(*f[])(u  )={0,foo,sub,til,cnt,cat,foo,foo,foo,foo,rev,fst,rcp,foo,foo},  //!< f[] is an array of pointers to c functions which implement monadic versions of k verbs listed in V.
+ (*F[])(u,u)={0,Add,Sub,Mod,Tak,Cat,At ,Eql,Not,And,Or ,Prd,Div,Gtn,Ltn};  //!< F[] is ditto for dyadic versions of verbs listed in V.
+// V:           +   -   !   #   ,   @   =   ~   &   |   *   %   >   <
 
 //!adverbs
 F(Ovr,ax?x:_x(r(*sx,i(nx-1,r=F[f](r,sx[i+1])))))                       //!< adverb over: recursively fold all elements of vector x using dyadic verb f going left to right.

@@ -26,7 +26,7 @@ typedef unsigned char c;typedef unsigned long u;         //!< type c is a shorth
 //!minimal atwc
 #define R return                                         //!< unclutter
 #define O printf                                         //!< classic atw debug
-#define $(a,b) if(a)b;else                               //!< handy shorthand for if-then-else. beware of dangling else!
+#define $(a,b) if(a){b;}else                             //!< handy shorthand for if-then-else. beware of dangling else!
 #define i(n,e) {int $n=n;int i=0;for(;i<$n;++i){e;}}     //!< (i)terate: execute (e)xpression n times, loop counter i is accessible from e
 #define P(b,e) if(b)return _(e);                         //!< predicate aka panic: if b evaluates to true, return result of e.
 
@@ -65,7 +65,7 @@ typedef unsigned char c;typedef unsigned long u;         //!< type c is a shorth
 #define af x(f,ax)                                       //!< is f an atom?
 #define nf x(f,nx)                                       //!< length of vector f
 #define rf x(f,rx)                                       //!< refcount of vector f
-#define sf x(f,sx)                                       //!< reinterpret r as char pointer (ie as string or byte vector)
+#define sf x(f,sx)                                       //!< reinterpret f as char pointer (ie as string or byte vector)
 #define fi x(f,xi)                                       //!< return i'th element of vector f or 0 if i is out of bounds
 
 //!error handling
